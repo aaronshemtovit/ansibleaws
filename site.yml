@@ -1,0 +1,109 @@
+---
+- name: Setup NGINX webservers for aaron
+  hosts: webservers
+  become: true
+  vars:
+    debian_vhost_path: "/etc/nginx/sites-available/default"
+    redhat_vhost_path: "/etc/nginx/conf.d/default.conf"
+
+  tasks:
+    - name: Update apt cache (Debian)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Enable NGINX via amazon-linux-extras (Amazon Linux)
+      command: amazon-linux-extras install nginx1 -y
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution == "Amazon"
+
+    - name: Install nginx (Debian)
+      apt:
+        name: nginx
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install nginx (RedHat non-Amazon)
+      yum:
+        name: nginx
+        state: present
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution != "Amazon"
+
+    - name: Install nginx (Amazon Linux)
+      yum:
+        name: nginx
+        state: present
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution == "Amazon"
+
+    - name: Create /var/www/html for Amazon Linux
+      file:
+        path: /var/www/html
+        state: directory
+        owner: nginx
+        group: nginx
+        mode: '0755'
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution == "Amazon"
+
+    - name: Create /var/www/html for Fedora
+      file:
+        path: /var/www/html
+        state: directory
+        owner: nginx
+        group: nginx
+        mode: '0755'
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution == "Fedora"
+
+    - name: Ensure nginx is running and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Update /etc/hosts with neighbor IPs (optional)
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[item].ansible_host }} {{ item }}"
+        state: present
+      with_items: "{{ groups['webservers'] }}"
+      when: item != inventory_hostname
+
+    - name: Create index.html
+      template:
+        src: templates/index.html.j2
+        dest: /var/www/html/index.html
+      notify: Restart nginx
+
+    - name: Deploy nginx config for Debian
+      template:
+        src: templates/nginx_debian.conf.j2
+        dest: "{{ debian_vhost_path }}"
+      when: ansible_os_family == "Debian"
+      notify: Restart nginx
+
+    - name: Deploy nginx config for RedHat
+      template:
+        src: templates/nginx_redhat.conf.j2
+        dest: "{{ redhat_vhost_path }}"
+      when: ansible_os_family == "RedHat"
+      notify: Restart nginx
+
+    - name: Test nginx config
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+      failed_when: nginx_test.rc != 0
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
