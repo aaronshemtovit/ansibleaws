@@ -1,0 +1,17 @@
+<html>
+  <head><title>Welcome from {{ inventory_hostname }}</title></head>
+  <body>
+    <h1>Host: {{ inventory_hostname }}</h1>
+    <p>Distro: {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+    <p>IP: {{ ansible_host }}</p>
+    <p>Generated at: {{ ansible_date_time.date }} {{ ansible_date_time.time }}</p>
+    <h2>Neighbors:</h2>
+    <ul>
+      {% for host in groups['webservers'] %}
+        {% if host != inventory_hostname %}
+          <li><a href="http://{{ hostvars[host].ansible_host }}">{{ host }} - {{ hostvars[host].ansible_host }}</a></li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+  </body>
+</html>
